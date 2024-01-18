@@ -78,6 +78,37 @@ func (status ClusterLogForwarderStatus) IsReady() bool {
 	return true
 }
 
+// Synchronize synchronizes the current Status with a new Status.
+// This is not the same as simply replacing the Status: Conditions contain the LastTransitionTime
+// field which is left unmodified by Synchronize for noops. Whereas all updates and additions shall use the current
+// (= now) timestamp.
+// In short, ignore any timestamp in newStatus, and for noops use the timestamp from old status or use time.Now() for
+// updates and additions.
+func (status *ClusterLogForwarderStatus) Synchronize(newStatus *ClusterLogForwarderStatus) {
+	// Set all newConditions in oldConditions. SetCondition adds (or updates) the set of conditions, and sets
+	// the current timestamp in case of an add or update. The timestamp won't be updated if the condition exists
+	// and does not need an update.
+	for _, cond := range newStatus.Conditions {
+		status.Conditions.SetCondition(cond)
+	}
+	// Remove any superfluous conditions.
+	var conditionsToRemove []ConditionType
+	for _, oldCond := range status.Conditions {
+		if newStatus.Conditions.GetCondition(oldCond.Type) == nil {
+			conditionsToRemove = append(conditionsToRemove, oldCond.Type)
+		}
+		for _, ctr := range conditionsToRemove {
+			status.Conditions.RemoveCondition(ctr)
+		}
+	}
+
+	// Synchronize the named status fields.
+	status.Filters.Synchronize(newStatus.Filters)
+	status.Inputs.Synchronize(newStatus.Inputs)
+	status.Outputs.Synchronize(newStatus.Outputs)
+	status.Pipelines.Synchronize(newStatus.Pipelines)
+}
+
 // RouteMap maps input names to connected outputs or vice-versa.
 type RouteMap map[string]*sets.String
 
