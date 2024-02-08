@@ -27,15 +27,23 @@ func ClusterLogForwarderReady(e watch.Event) (bool, error) {
 	}
 }
 
+// ClusterLogForwarderValidationFailure expects condition type "Validation" to be set on the ClusterLogForwarder
+// resource. If no such condition can be found, it returns false, and a nil error (so that c.WaitFor can wait until
+// the condition is set, or time out if the condition is never set). If the condition is set, we expect its message
+// to match validationFailureMsg and we expect it to be "True". We also expect the "Ready" condition to be "False".
+// In that case, we return true and no error. In case of the contrary, we return false and an error.
 func ClusterLogForwarderValidationFailure(e watch.Event) (bool, error) {
 	clf := e.Object.(*loggingv1.ClusterLogForwarder)
 	cond := clf.Status.Conditions
 
-	if validationCondition := cond.GetCondition(loggingv1.ValidationCondition); validationCondition != nil {
-		if strings.Contains(validationCondition.Message, validationFailureMsg) &&
-			validationCondition.Status == v1.ConditionTrue && cond.IsFalseFor(loggingv1.ConditionReady) {
-			return true, nil
-		}
+	validationCondition := cond.GetCondition(loggingv1.ValidationCondition)
+	if validationCondition == nil {
+		return false, nil
+	}
+
+	if strings.Contains(validationCondition.Message, validationFailureMsg) &&
+		validationCondition.Status == v1.ConditionTrue && cond.IsFalseFor(loggingv1.ConditionReady) {
+		return true, nil
 	}
 	return false, fmt.Errorf("ClusterLogForwarder unexpected condition: %v", test.YAMLString(clf.Status))
 }
